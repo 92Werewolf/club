@@ -1,16 +1,17 @@
 import pymongo,sys,subprocess,os,time
+from bson.objectid import ObjectId
 import SoftwareInterfaceStyle as sis
 from sys import platform
 from pathlib import Path
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget,QApplication,QGridLayout,QVBoxLayout,QLabel,QLineEdit,QPushButton,QComboBox,QTableWidget,QAbstractItemView,
-                             QHeaderView,QMessageBox,QTableWidgetItem,QMenu,QSpinBox,QTextEdit,QCalendarWidget,QFileDialog,QInputDialog)
+                             QHeaderView,QMessageBox,QTableWidgetItem,QMenu,QSpinBox,QTextEdit,QCalendarWidget,QFileDialog,QInputDialog,QCheckBox)
 from PyQt6.QtCore import Qt,QDate
 from PyQt6.QtGui import QPixmap,QAction,QCursor,QTextCharFormat,QColor,QTextCursor,QIcon
 import Orders_Language as lang
 if platform == "win32": import win32print # Importazione del modulo stampa per sistemi operativi Windows
 
-# Versione 1.0.1-r1
+# Versione 1.0.2-r8
 
 # Debug mode
 
@@ -26,7 +27,7 @@ logo_path = ""
 icon_path = ""
 menu_dict = {}
 first_start_application = 0
-total_rows = 11
+total_rows = 13
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -70,7 +71,7 @@ class MainWindow(QWidget):
         self.B_options_menu.clicked.connect(self.options_menu_open)
         self.lay.addWidget(self.B_options_menu, 0, 4, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
-        # Creazione categorie (Parte centrale sinistra)
+        # Creazione ed eliminazione categorie (Parte centrale sinistra)
         
         L_category_creation = QLabel(self, text=lang.msg(language, 1, "MainWindow"))
         L_category_creation.setAccessibleName("an_section_title")
@@ -78,11 +79,15 @@ class MainWindow(QWidget):
         
         self.LE_category_creation_description = QLineEdit(self)
         self.LE_category_creation_description.setPlaceholderText(lang.msg(language, 2, "MainWindow"))
-        self.lay.addWidget(self.LE_category_creation_description, 2, 0, 1, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.LE_category_creation_description, 2, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         self.B_category_creation = QPushButton(self, text=lang.msg(language, 3, "MainWindow"))
         self.B_category_creation.clicked.connect(self.category_creation)
-        self.lay.addWidget(self.B_category_creation, 2, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.B_category_creation, 2, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        self.B_category_delete = QPushButton(self, text=lang.msg(language, 26, "MainWindow"))
+        self.B_category_delete.clicked.connect(self.delete_category)
+        self.lay.addWidget(self.B_category_delete, 2, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         # Inserimento prodotti (Parte sinistra centrale)
         
@@ -133,11 +138,26 @@ class MainWindow(QWidget):
         self.TE_additional_note.setPlaceholderText(lang.msg(language, 11, "MainWindow"))
         self.lay.addWidget(self.TE_additional_note, 9, 0, 1, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
+        # Ordini da inviare (Parte sinistra bassa)
+        
+        L_order_to_send = QLabel(self, text=lang.msg(language, 46, "MainWindow"))
+        L_order_to_send.setAccessibleName("an_section_title")
+        self.lay.addWidget(L_order_to_send, 10, 0, 1, 3, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        self.list_category_to_send = []
+        self.ChB_category_to_send = QCheckBox(self, text=lang.msg(language, 44, "MainWindow"))
+        self.ChB_category_to_send.stateChanged.connect(self.category_to_send_changed)
+        self.lay.addWidget(self.ChB_category_to_send, 11, 0, 1, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        self.B_see_orders = QPushButton(self, text=lang.msg(language, 47, "MainWindow"))
+        self.B_see_orders.clicked.connect(self.open_orders_table)
+        self.lay.addWidget(self.B_see_orders, 11, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
         # Funzioni per stampa e salvataggio (Parte sinistra bassa)
         
         L_print_save = QLabel(self, text=lang.msg(language, 12, "MainWindow"))
         L_print_save.setAccessibleName("an_section_title")
-        self.lay.addWidget(L_print_save, 10, 0, 1, 3, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(L_print_save, 12, 0, 1, 3, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         self.CB_printer_list = QComboBox(self) # ComboBox lista stampanti
         printers_list = []
@@ -153,15 +173,15 @@ class MainWindow(QWidget):
                 if len(line) > 0 and list_count !=0: printers_list.append(line)
                 list_count += 1
         self.CB_printer_list.addItems(printers_list)
-        self.lay.addWidget(self.CB_printer_list, 11, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.CB_printer_list, 13, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         self.B_print = QPushButton(self, text=lang.msg(language, 13, "MainWindow")) # Pulsante stampa
         self.B_print.clicked.connect(self.print_receipt)
-        self.lay.addWidget(self.B_print, 11, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.B_print, 13, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         self.B_save = QPushButton(self, text=lang.msg(language, 14, "MainWindow")) # Pulsante salva
         self.B_save.clicked.connect(self.save_receipt)
-        self.lay.addWidget(self.B_save, 11, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.B_save, 13, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         # Selezione Categoria (Parte centrale alta)
         
@@ -195,7 +215,7 @@ class MainWindow(QWidget):
         self.T_receipt.setColumnCount(3)
         self.T_receipt.setHorizontalHeaderLabels([lang.msg(language, 2, "MainWindow"), lang.msg(language, 16, "MainWindow"), lang.msg(language, 17, "MainWindow")])
         self.T_receipt.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.T_receipt.clicked.connect(self.remove_one_from_receipt)
+        self.T_receipt.doubleClicked.connect(self.remove_one_from_receipt)
         self.T_receipt.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.T_receipt.customContextMenuRequested.connect(self.remove_row_from_receipt)
         self.T_receipt_headers = self.T_receipt.horizontalHeader()
@@ -209,10 +229,16 @@ class MainWindow(QWidget):
         self.lay.addWidget(self.L_total_receipt, total_rows, 4, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
         # Funzione Per riempimento iniziale combobox (lasciare sempre per ultima!)
-        col = self.db["maincategory"]
-        for category in col.find({}, {"_id": 0, "category": 1}):
-            if self.CB_category_selection.findText(category["category"]) == -1:
-                self.CB_category_selection.addItem(category["category"])
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            for category in col.find({}, {"_id": 0, "category": 1}):
+                if self.CB_category_selection.findText(category["category"]) == -1:
+                    self.CB_category_selection.addItem(category["category"])
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
     
     # *-*-* Funzioni per il ridimensionamento della finestra *-*-*
 
@@ -222,7 +248,7 @@ class MainWindow(QWidget):
         
         try:
             # Creazione categorie
-            self.LE_category_creation_description.setMinimumWidth(int(W_width / 2))
+            self.LE_category_creation_description.setMinimumWidth(int(W_width / 2) - 40)
             # Inserimento dati
             self.LE_products_insert_description.setMinimumWidth(int((W_width / 2) - 40))
             self.LE_products_insert_price.setMinimumWidth(int((W_width / 3) - 40))
@@ -270,9 +296,6 @@ class MainWindow(QWidget):
             err_msg = QMessageBox(self)
             err_msg.setWindowTitle(lang.msg(language, 21, "MainWindow"))
             err_msg.setText(lang.msg(language, 22, "MainWindow"))
-            err_msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.No)
-            err_msg.buttonClicked.connect(self.delete_category)
-            self.index_delete_category = self.CB_category_selection.findText(self.inserted_category)
             return err_msg.exec()
         
         self.CB_category_selection.addItem(self.inserted_category)
@@ -322,13 +345,25 @@ class MainWindow(QWidget):
         for row in range(rows):
             if self.inserted_category == self.T_products.item(row, 0).text():
                 self.T_products.setItem(row, 1, QTableWidgetItem(inserted_price))
-                col.update_one({"description": self.inserted_category, "category": self.CB_category_selection.currentText()}, {"$set": {"price": inserted_price}})
+                try: # Controllo della connessione al database
+                    col.update_one({"description": self.inserted_category, "category": self.CB_category_selection.currentText()}, {"$set": {"price": inserted_price}})
+                except:
+                    err_msg = QMessageBox(self)
+                    err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+                    err_msg.setText(lang.msg(language, 48, "MainWindow"))
+                    return err_msg.exec()
                 break
         else:
             self.T_products.insertRow(rows)
             self.T_products.setItem(rows, 0, QTableWidgetItem(self.inserted_category))
             self.T_products.setItem(rows, 1, QTableWidgetItem(inserted_price))
-            col.insert_one({"description": self.inserted_category, "price": inserted_price, "row": rows, "category": self.CB_category_selection.currentText()})
+            try: # Controllo della connessione al database
+                col.insert_one({"description": self.inserted_category, "price": inserted_price, "row": rows, "category": self.CB_category_selection.currentText()})
+            except:
+                err_msg = QMessageBox(self)
+                err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+                err_msg.setText(lang.msg(language, 48, "MainWindow"))
+                return err_msg.exec()
         
         # Pulizia campi
         
@@ -337,22 +372,27 @@ class MainWindow(QWidget):
     
     # Eliminazione categoria
     
-    def delete_category(self, button):
-        if button.text() == "&OK" or button.text() == "OK":
-            # Connessione alla collezione del database
-            
-            col = self.db["maincategory"]
-            
-            # Controllo presenza nel database ed eventuale eliminazione
+    def delete_category(self):
+        col = self.db["maincategory"]
+        
+        # Controllo presenza nel database ed eventuale eliminazione
 
+        try: # Controllo della connessione al database
             col.delete_many({"category": self.inserted_category})
-            
-            # Rimozione dalla ComboBox
-            
-            self.CB_category_selection.removeItem(self.index_delete_category)
-            
-            # Pulizia campo descrizione
-            self.LE_category_creation_description.setText("")
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+        
+        # Rimozione dalla lista
+        
+        if self.CB_category_selection.currentText() in self.list_category_to_send:
+            self.list_category_to_send.pop(self.list_category_to_send.index(self.CB_category_selection.currentText()))
+        
+        # Rimozione dalla ComboBox
+        
+        self.CB_category_selection.removeItem(self.CB_category_selection.currentIndex())
     
     # Cambio categoria
     
@@ -368,11 +408,30 @@ class MainWindow(QWidget):
         
         # Aggiunta articoli se esistono nel database
         row_count = 0
-        for product in col.find({"category": self.CB_category_selection.currentText()}, {"_id": 0}).sort("row"):
-            self.T_products.insertRow(row_count)
-            self.T_products.setItem(row_count, 0, QTableWidgetItem(product["description"]))
-            self.T_products.setItem(row_count, 1, QTableWidgetItem(product["price"]))
-            row_count += 1
+        try: # Controllo della connessione al database
+            for product in col.find({"category": self.CB_category_selection.currentText()}, {"_id": 0}).sort("row"):
+                self.T_products.insertRow(row_count)
+                self.T_products.setItem(row_count, 0, QTableWidgetItem(product["description"]))
+                self.T_products.setItem(row_count, 1, QTableWidgetItem(product["price"]))
+                row_count += 1
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+        # Modifica della checkbox se la categoria è già stata segnata
+        if self.CB_category_selection.currentText() in self.list_category_to_send: self.ChB_category_to_send.setChecked(True)
+        else: self.ChB_category_to_send.setChecked(False)
+    
+    # Funzione invio ordine automatico
+    
+    def category_to_send_changed(self):
+        if self.ChB_category_to_send.isChecked() == True:
+            if self.CB_category_selection.currentText() not in self.list_category_to_send:
+                self.list_category_to_send.append(self.CB_category_selection.currentText())
+        else:
+            try: self.list_category_to_send.pop(self.list_category_to_send.index(self.CB_category_selection.currentText()))
+            except: pass
     
     # Funzione per il set del totale
     
@@ -421,14 +480,20 @@ class MainWindow(QWidget):
         
         # Eliminazione dal Database
         
-        col = self.db["maincategory"]
-        dbrow = col.find_one({"description": product, "category": self.CB_category_selection.currentText()})
-        dbrow = dbrow["row"]
-        col.delete_one({"description": product, "category": self.CB_category_selection.currentText()})
-        
-        # Update della riga degli altri
-        
-        col.update_many({"category": self.CB_category_selection.currentText(), "row": {"$gt": dbrow}}, {"$inc": {"row": -1}})
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            dbrow = col.find_one({"description": product, "category": self.CB_category_selection.currentText()})
+            dbrow = dbrow["row"]
+            col.delete_one({"description": product, "category": self.CB_category_selection.currentText()})
+            
+            # Update della riga degli altri
+            
+            col.update_many({"category": self.CB_category_selection.currentText(), "row": {"$gt": dbrow}}, {"$inc": {"row": -1}})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
     
     # Funzione sposta su
     
@@ -454,9 +519,15 @@ class MainWindow(QWidget):
         
         # Modifica nel database
         
-        col = self.db["maincategory"]
-        col.update_one({"description": product_desc, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": -1}})
-        col.update_one({"description": product_desc_m, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": 1}})
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            col.update_one({"description": product_desc, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": -1}})
+            col.update_one({"description": product_desc_m, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": 1}})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
         
         # Spostamento del prodotto
         
@@ -489,9 +560,15 @@ class MainWindow(QWidget):
         
         # Modifica nel database
         
-        col = self.db["maincategory"]
-        col.update_one({"description": product_desc, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": 1}})
-        col.update_one({"description": product_desc_m, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": -1}})
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            col.update_one({"description": product_desc, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": 1}})
+            col.update_one({"description": product_desc_m, "category": self.CB_category_selection.currentText()}, {"$inc": {"row": -1}})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
         
         # Spostamento del prodotto
         
@@ -524,7 +601,13 @@ class MainWindow(QWidget):
             if receipt_row == 0:
                 self.T_receipt.insertRow(receipt_row)
                 total_price = f"{float(self.T_products.item(row, 1).text()) * number:.2f}"
-                self.T_receipt.setItem(receipt_row, 0, QTableWidgetItem(self.T_products.item(row, 0).text()))
+                chkBoxItem = QTableWidgetItem(self.T_products.item(row, 0).text())
+                chkBoxItem.setText(self.T_products.item(row, 0).text())
+                chkBoxItem.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                if self.CB_category_selection.currentText() in self.list_category_to_send:
+                    chkBoxItem.setCheckState(Qt.CheckState.Checked)
+                else: chkBoxItem.setCheckState(Qt.CheckState.Unchecked)
+                self.T_receipt.setItem(receipt_row, 0, chkBoxItem)
                 self.T_receipt.setItem(receipt_row, 1, QTableWidgetItem(f"{number}"))
                 self.T_receipt.setItem(receipt_row, 2, QTableWidgetItem(total_price))
                 self.category_in_receipt.append(self.CB_category_selection.currentText()) # Aggiunta categoria in lista
@@ -540,7 +623,13 @@ class MainWindow(QWidget):
                 else: # Se non esiste
                     self.T_receipt.insertRow(receipt_row)
                     total_price = f"{float(self.T_products.item(row, 1).text()) * number:.2f}"
-                    self.T_receipt.setItem(receipt_row, 0, QTableWidgetItem(self.T_products.item(row, 0).text()))
+                    chkBoxItem = QTableWidgetItem(self.T_products.item(row, 0).text())
+                    chkBoxItem.setText(self.T_products.item(row, 0).text())
+                    chkBoxItem.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                    if self.CB_category_selection.currentText() in self.list_category_to_send:
+                        chkBoxItem.setCheckState(Qt.CheckState.Checked)
+                    else: chkBoxItem.setCheckState(Qt.CheckState.Unchecked)
+                    self.T_receipt.setItem(receipt_row, 0, chkBoxItem)
                     self.T_receipt.setItem(receipt_row, 1, QTableWidgetItem(f"{number}"))
                     self.T_receipt.setItem(receipt_row, 2, QTableWidgetItem(total_price))
                     self.category_in_receipt.append(self.CB_category_selection.currentText()) # Aggiunta categoria in lista
@@ -561,7 +650,13 @@ class MainWindow(QWidget):
         
         if receipt_row == 0:
             self.T_receipt.insertRow(receipt_row)
-            self.T_receipt.setItem(receipt_row, 0, QTableWidgetItem(self.T_products.item(row, 0).text()))
+            chkBoxItem = QTableWidgetItem(self.T_products.item(row, 0).text())
+            chkBoxItem.setText(self.T_products.item(row, 0).text())
+            chkBoxItem.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            if self.CB_category_selection.currentText() in self.list_category_to_send:
+                chkBoxItem.setCheckState(Qt.CheckState.Checked)
+            else: chkBoxItem.setCheckState(Qt.CheckState.Unchecked)
+            self.T_receipt.setItem(receipt_row, 0, chkBoxItem)
             self.T_receipt.setItem(receipt_row, 1, QTableWidgetItem("1"))
             self.T_receipt.setItem(receipt_row, 2, QTableWidgetItem(self.T_products.item(row, 1).text()))
             self.category_in_receipt.append(self.CB_category_selection.currentText()) # Aggiunta categoria in lista
@@ -576,7 +671,13 @@ class MainWindow(QWidget):
                     break
             else: # Se non esiste
                 self.T_receipt.insertRow(receipt_row)
-                self.T_receipt.setItem(receipt_row, 0, QTableWidgetItem(self.T_products.item(row, 0).text()))
+                chkBoxItem = QTableWidgetItem(self.T_products.item(row, 0).text())
+                chkBoxItem.setText(self.T_products.item(row, 0).text())
+                chkBoxItem.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                if self.CB_category_selection.currentText() in self.list_category_to_send:
+                    chkBoxItem.setCheckState(Qt.CheckState.Checked)
+                else: chkBoxItem.setCheckState(Qt.CheckState.Unchecked)
+                self.T_receipt.setItem(receipt_row, 0, chkBoxItem)
                 self.T_receipt.setItem(receipt_row, 1, QTableWidgetItem("1"))
                 self.T_receipt.setItem(receipt_row, 2, QTableWidgetItem(self.T_products.item(row, 1).text()))
                 self.category_in_receipt.append(self.CB_category_selection.currentText()) # Aggiunta categoria in lista
@@ -659,6 +760,56 @@ class MainWindow(QWidget):
     
     def print_receipt(self):
         if self.T_receipt.rowCount() == 0: return # Se la tabella scontrino è vuota
+        # Invio Ordine
+        lines_to_send = ""
+        for line in range(self.T_receipt.rowCount()):
+            if self.T_receipt.item(line, 0).checkState() == Qt.CheckState.Checked:
+                lines_to_send = lines_to_send + f"{line}-"
+        if lines_to_send != "":
+            lines_to_send = lines_to_send[:-1]
+            # Invio ordine al database
+            date_time = datetime.now()
+            date = date_time.strftime("%Y%m%d")
+            time = date_time.strftime("%H%M%S")
+            customer = ""
+            table = ""
+            if self.LE_customer_name.text() != "": customer = self.LE_customer_name.text()
+            else: customer = "-"
+            if self.SB_table_select.value() != -1: table = f"{self.SB_table_select.value()}"
+            else: table = "-"
+            order = ""
+            lines_list = lines_to_send.split("-")
+            for line_list in lines_list:
+                description = self.T_receipt.item(int(line_list), 0).text()
+                quantity = self.T_receipt.item(int(line_list), 1).text()
+                total_price = self.T_receipt.item(int(line_list), 2).text()
+                order = order + f"{description} - {lang.msg(language, 42, 'MainWindow')}: {quantity} - {total_price} {lang.msg(language, 18, 'MainWindow')}\n"
+                # Se è presente un menu per il prodotto
+                dic_key = description + self.category_in_receipt[int(line_list)]
+                if dic_key in menu_dict:
+                    line = menu_dict[dic_key].split("@nl@")
+                    for detailed_product in line:
+                        detail = detailed_product.split("@sp@")
+                        detailed_description = detail[0]
+                        detailed_quantity = detail[1]
+                        detailed_price = detail[2]
+                        if detailed_quantity != "-": detailed_quantity = f"{float(detailed_quantity) * float(quantity):.2f}"
+                        if detailed_price != "-" and detailed_quantity != "-": detailed_price = f"{float(detailed_price) * float(detailed_quantity):.2f}"
+                        order = order + f"*-*-* {detailed_description} - {lang.msg(language, 42, 'MainWindow')} {detailed_quantity} - {lang.msg(language, 43, 'MainWindow')} {detailed_price}\n"
+            order = order[:-1]
+            order_note = ""
+            if len(self.TE_additional_note.toPlainText()) > 0: order_note = self.TE_additional_note.toPlainText()
+            else: order_note = "-"
+            
+            try: # Controllo della connessione al database
+                col = self.db["orders"]
+                col.insert_one({"status":"now_ordered", "date": date, "time": time, "customer": customer, "table": table, "order": order, "order_note": order_note})
+            except:
+                err_msg = QMessageBox(self)
+                err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+                err_msg.setText(lang.msg(language, 48, "MainWindow"))
+                return err_msg.exec()
+            
         # Salvataggio su DB
         date_time = datetime.now()
         date = date_time.strftime("%Y%m%d")
@@ -670,8 +821,15 @@ class MainWindow(QWidget):
             total_price = self.T_receipt.item(row, 2).text()
             products = products + f"{description}@space@{quantity}@space@{total_price}@newline@"
         products = products[:-9]
-        col = self.db["receipts"]
-        col.insert_one({"receipt_date": date, "receipt_time": time, "receipt_products": products})
+        try: # Controllo della connessione al database
+            col = self.db["receipts"]
+            col.insert_one({"receipt_date": date, "receipt_time": time, "receipt_products": products})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+            
         # Stampa scontrino
         printer = self.CB_printer_list.currentText()
         
@@ -753,6 +911,56 @@ class MainWindow(QWidget):
     # Funzione salvataggio su DB
     def save_receipt(self):
         if self.T_receipt.rowCount() == 0: return # Se la tabella scontrino è vuota
+        # Invio Ordine
+        lines_to_send = ""
+        for line in range(self.T_receipt.rowCount()):
+            if self.T_receipt.item(line, 0).checkState() == Qt.CheckState.Checked:
+                lines_to_send = lines_to_send + f"{line}-"
+        if lines_to_send != "":
+            lines_to_send = lines_to_send[:-1]
+            # Invio ordine al database
+            date_time = datetime.now()
+            date = date_time.strftime("%Y%m%d")
+            time = date_time.strftime("%H%M%S")
+            customer = ""
+            table = ""
+            if self.LE_customer_name.text() != "": customer = self.LE_customer_name.text()
+            else: customer = "-"
+            if self.SB_table_select.value() != -1: table = f"{self.SB_table_select.value()}"
+            else: table = "-"
+            order = ""
+            lines_list = lines_to_send.split("-")
+            for line_list in lines_list:
+                description = self.T_receipt.item(int(line_list), 0).text()
+                quantity = self.T_receipt.item(int(line_list), 1).text()
+                total_price = self.T_receipt.item(int(line_list), 2).text()
+                order = order + f"{description} - {lang.msg(language, 42, 'MainWindow')}: {quantity} - {total_price} {lang.msg(language, 18, 'MainWindow')}\n"
+                # Se è presente un menu per il prodotto
+                dic_key = description + self.category_in_receipt[int(line_list)]
+                if dic_key in menu_dict:
+                    line = menu_dict[dic_key].split("@nl@")
+                    for detailed_product in line:
+                        detail = detailed_product.split("@sp@")
+                        detailed_description = detail[0]
+                        detailed_quantity = detail[1]
+                        detailed_price = detail[2]
+                        if detailed_quantity != "-": detailed_quantity = f"{float(detailed_quantity) * float(quantity):.2f}"
+                        if detailed_price != "-" and detailed_quantity != "-": detailed_price = f"{float(detailed_price) * float(detailed_quantity):.2f}"
+                        order = order + f"*-*-* {detailed_description} - {lang.msg(language, 42, 'MainWindow')} {detailed_quantity} - {lang.msg(language, 43, 'MainWindow')} {detailed_price}\n"
+            order = order[:-1]
+            order_note = ""
+            if len(self.TE_additional_note.toPlainText()) > 0: order_note = self.TE_additional_note.toPlainText()
+            else: order_note = "-"
+            
+            try: # Controllo della connessione al database
+                col = self.db["orders"]
+                col.insert_one({"status":"now_ordered", "date": date, "time": time, "customer": customer, "table": table, "order": order, "order_note": order_note})
+            except:
+                err_msg = QMessageBox(self)
+                err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+                err_msg.setText(lang.msg(language, 48, "MainWindow"))
+                return err_msg.exec()
+            
         date_time = datetime.now()
         date = date_time.strftime("%Y%m%d")
         time = date_time.strftime("%H%M%S")
@@ -763,8 +971,14 @@ class MainWindow(QWidget):
             total_price = self.T_receipt.item(row, 2).text()
             products = products + f"{description}@space@{quantity}@space@{total_price}@newline@"
         products = products[:-9]
-        col = self.db["receipts"]
-        col.insert_one({"receipt_date": date, "receipt_time": time, "receipt_products": products})
+        try: # Controllo della connessione al database
+            col = self.db["receipts"]
+            col.insert_one({"receipt_date": date, "receipt_time": time, "receipt_products": products})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
         
         # Pulizia caselle, tabella e lista
         
@@ -794,6 +1008,181 @@ class MainWindow(QWidget):
         self.options_window = OptionsMenu()
         self.options_window.show()
         self.close()
+    
+    # *-*-* Funzione apertura finestra ordini *-*-*
+    
+    def open_orders_table(self):
+        self.orders_window = OrdersWindow()
+        self.orders_window.show()
+
+# *-*-* Finestra Ordini *-*-*
+
+class OrdersWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        
+        self.db = dbclient["Bar"] # Apertura database
+        
+        self.setWindowIcon(QIcon(icon_path))
+        self.setWindowTitle(f"{lang.msg(language, 0, 'OrdersWindow')} {heading}")
+        self.setMinimumSize(640, 480)
+        self.lay = QGridLayout(self)
+        self.setLayout(self.lay)
+        self.lay.setContentsMargins(10,10,10,10)
+        self.lay.setSpacing(1)
+        self.setStyleSheet(sis.interface_style(interface))
+        
+        # Tabella ordini
+        
+        self.T_orders = QTableWidget(self)
+        self.T_orders.setColumnCount(4)
+        self.T_orders.setHorizontalHeaderLabels(["ID", lang.msg(language, 10, "MainWindow"), lang.msg(language, 1, "OrdersWindow"), lang.msg(language, 2, "OrdersWindow")])
+        self.T_orders.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.T_orders.doubleClicked.connect(self.show_detailed_order)
+        self.T_orders.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.T_orders.customContextMenuRequested.connect(self.T_orders_CM)
+        self.T_orders_headers = self.T_orders.horizontalHeader()
+        self.lay.addWidget(self.T_orders, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignCenter)
+        
+        # Pulsante aggiornamento tabella
+        
+        self.B_update = QPushButton(self, text=lang.msg(language, 10, "OrdersWindow"))
+        self.B_update.clicked.connect(self.search_orders)
+        self.lay.addWidget(self.B_update, 1, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        # Avvio ricerca ordini
+        self.search_orders()
+        
+    def resizeEvent(self, event):
+        W_width = self.width()
+        W_height = self.height()
+        
+        try:
+            # Tabella ordini
+            self.T_orders.setMinimumSize(int(W_width - 15), int((W_height - 65)))
+            self.T_orders_headers.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            self.T_orders_headers.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            self.T_orders_headers.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            self.T_orders_headers.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        except AttributeError:
+            pass
+    
+    # *-*-* Ricerca ordini *-*-*
+    
+    def search_orders(self):
+        # Rimozione righe iniziale
+        if self.T_orders.rowCount() != 0:
+            for row in reversed(range(self.T_orders.rowCount())):
+                self.T_orders.removeRow(row)
+        
+        try: # Controllo della connessione al database
+            col = self.db["orders"]
+            for line in col.find().sort("_id", pymongo.DESCENDING):
+                date_time = f"{line['date'][6:]}/{line['date'][4:6]}/{line['date'][:4]} - {line['time'][:2]}:{line['time'][2:4]}:{line['time'][4:]}"
+                status_st = ""
+                if line["status"] == "ordered" or line["status"] == "now_ordered": status_st = lang.msg(language, 3, "OrdersWindow")
+                if line["status"] == "in_progress": status_st = lang.msg(language, 4, "OrdersWindow")
+                if line["status"] == "done": status_st = lang.msg(language, 5, "OrdersWindow")
+                row = self.T_orders.rowCount()
+                self.T_orders.insertRow(row)
+                self.T_orders.setItem(row, 0, QTableWidgetItem(str(line["_id"])))
+                self.T_orders.setItem(row, 1, QTableWidgetItem(f"{lang.msg(language, 10, 'MainWindow')}: {line['customer']}"))
+                self.T_orders.setItem(row, 2, QTableWidgetItem(date_time))
+                self.T_orders.setItem(row, 3, QTableWidgetItem(status_st))
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+    
+    # *-*-* Visualizzazione dettagliata degli ordini *-*-*
+    
+    def show_detailed_order(self):
+        row = self.T_orders.currentRow()
+        
+        if row == -1: return # Blocco delle funzioni se nulla è selezionato
+        
+        try: # Controllo della connessione al database
+            col = self.db["orders"]
+            obj_instance = ObjectId(self.T_orders.item(row, 0).text())
+            order = col.find_one({"_id": obj_instance})
+            order_string = f"""ID: {order['_id']}
+{lang.msg(language, 10, "MainWindow")}: {order["customer"]} - {lang.msg(language, 41, "MainWindow")}: {order["table"]}
+{lang.msg(language, 7, "OrdersWindow")}: {order['date'][6:]}/{order['date'][4:6]}/{order['date'][:4]} - {lang.msg(language, 8, "OrdersWindow")}: {order['time'][:2]}:{order['time'][2:4]}:{order['time'][4:]}
+-----------------------------------
+{order["order"]}
+-----------------------------------
+{order["order_note"]}"""
+            msg = QMessageBox(self)
+            msg.setWindowTitle(lang.msg(language, 6, "OrdersWindow"))
+            msg.setText(order_string)
+            return msg.exec()
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+    
+    # *-*-* Cambio stato ordine *-*-*
+    
+    def change_status(self, status:str):
+        row = self.T_orders.currentRow()
+        
+        if row == -1: return # Blocco delle funzioni se nulla è selezionato
+        
+        status_st = ""
+        if status == "ordered": status_st = lang.msg(language, 3, "OrdersWindow")
+        if status == "in_progress": status_st = lang.msg(language, 4, "OrdersWindow")
+        if status == "done": status_st = lang.msg(language, 5, "OrdersWindow")
+        
+        try: # Controllo della connessione al database
+            col = self.db["orders"]
+            obj_instance = ObjectId(self.T_orders.item(row, 0).text())
+            col.update_one({"_id": obj_instance},{"$set": {"status": status}})
+            self.T_orders.setItem(row, 3, QTableWidgetItem(status_st))
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+    
+    # *-*-* Eliminazione ordine *-*-*
+    
+    def delete_order(self):
+        row = self.T_orders.currentRow()
+        
+        if row == -1: return # Blocco delle funzioni se nulla è selezionato
+        
+        try: # Controllo della connessione al database
+            col = self.db["orders"]
+            obj_instance = ObjectId(self.T_orders.item(row, 0).text())
+            
+            col.delete_one({"_id": obj_instance})
+            self.T_orders.removeRow(row)
+            self.T_orders.setCurrentCell(-1, -1)
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+    
+    # *-*-* Custom Menu della tabella *-*-*
+    
+    def T_orders_CM(self):
+        if self.T_orders.currentRow() == -1: return
+        menu = QMenu(self)
+        sdo_action = QAction(lang.msg(language, 9, "OrdersWindow"), self)
+        cs_ordered_action = QAction(lang.msg(language, 11, "OrdersWindow"), self)
+        cs_inprogress_action = QAction(lang.msg(language, 12, "OrdersWindow"), self)
+        cs_done_action = QAction(lang.msg(language, 13, "OrdersWindow"), self)
+        delete_action = QAction(lang.msg(language, 26, "MainWindow"), self)
+        sdo_action.triggered.connect(self.show_detailed_order)
+        cs_ordered_action.triggered.connect(lambda x: self.change_status("ordered"))
+        cs_inprogress_action.triggered.connect(lambda x: self.change_status("in_progress"))
+        cs_done_action.triggered.connect(lambda x: self.change_status("done"))
+        delete_action.triggered.connect(self.delete_order)
+        menu.addActions([sdo_action,cs_ordered_action,cs_inprogress_action,cs_done_action,delete_action])
+        menu.popup(QCursor.pos())
 
 # *-*-* Finestra Database *-*-*
 
@@ -804,7 +1193,7 @@ class DatabaseWindow(QWidget):
         
         self.setWindowIcon(QIcon(icon_path))
         self.setWindowTitle(f"Database {heading}")
-        self.setFixedSize(480, 640)
+        self.setFixedSize(540, 640)
         self.lay = QGridLayout(self)
         self.setLayout(self.lay)
         self.lay.setContentsMargins(10,10,10,10)
@@ -839,14 +1228,14 @@ class DatabaseWindow(QWidget):
         # Label istruzioni orari
         
         L_time_range = QLabel(self, text=lang.msg(language, 0, "DatabaseWindow"))
-        self.lay.addWidget(L_time_range, 0, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(L_time_range, 0, 1, 1, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         # Casella selezione orari
         
         self.LE_time_range = QLineEdit(self)
-        self.LE_time_range.setFixedWidth(150)
+        self.LE_time_range.setFixedWidth(250)
         self.LE_time_range.setPlaceholderText(lang.msg(language, 1, "DatabaseWindow"))
-        self.lay.addWidget(self.LE_time_range, 1, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.lay.addWidget(self.LE_time_range, 1, 1, 1, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         # Bottone interroga
         
@@ -854,18 +1243,30 @@ class DatabaseWindow(QWidget):
         self.B_query_database.clicked.connect(self.query_database)
         self.lay.addWidget(self.B_query_database, 2, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
+        # Label ordinamento dizionario
+        
+        L_sort_orders = QLabel(self, text=lang.msg(language, 17, "DatabaseWindow"))
+        self.lay.addWidget(L_sort_orders, 2, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
         # Bottone elimina dal database
         
         self.B_delete_database = QPushButton(self, text=lang.msg(language, 26, "MainWindow"))
         self.B_delete_database.clicked.connect(self.delete_database)
         self.lay.addWidget(self.B_delete_database, 3, 1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
+        # Combobox ordinamento dizionario
+        
+        self.CB_sort_orders = QComboBox(self)
+        self.CB_sort_orders.addItems([lang.msg(language, 18, "DatabaseWindow"),lang.msg(language, 19, "DatabaseWindow"),lang.msg(language, 20, "DatabaseWindow"),
+                                      lang.msg(language, 21, "DatabaseWindow"),lang.msg(language, 22, "DatabaseWindow"),lang.msg(language, 23, "DatabaseWindow")])
+        self.lay.addWidget(self.CB_sort_orders, 3, 2, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
         # Text Edit per risposta Database
         
         self.TE_database_response = QTextEdit(self)
         self.TE_database_response.setReadOnly(True)
         self.TE_database_response.setFixedHeight(450)
-        self.lay.addWidget(self.TE_database_response, 4, 0, 1, 2, Qt.AlignmentFlag.AlignTop)
+        self.lay.addWidget(self.TE_database_response, 4, 0, 1, 3, Qt.AlignmentFlag.AlignTop)
     
     def date_select(self):
         if self.date_selection == 0: # Selezione della seconda data
@@ -904,160 +1305,31 @@ class DatabaseWindow(QWidget):
         self.TE_database_response.clear()
         self.TE_database_response.insertPlainText(f"-*-* {lang.msg(language, 3, 'DatabaseWindow')} *-*-\n\n")
         
-        if self.second_date == "": # Se è selezionata una sola data
-            firstdate = f"{self.first_date[6:]}/{self.first_date[4:6]}/{self.first_date[:4]}"
-            if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
-                for products in col.find({"receipt_date": self.first_date}, {"_id": 0}):
-                    result = 1
-                    self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
-                    for product in str(products["receipt_products"]).split("@newline@"):
-                        detail = product.split("@space@")
-                        self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
-                        total_receipts += float(detail[2])
-                        if detail[0] not in detail_tot:
-                            detail_tot[detail[0]] = {}
-                            detail_tot[detail[0]]["quantity"] = int(detail[1])
-                            detail_tot[detail[0]]["total"] = float(detail[2])
-                        else:
-                            detail_tot[detail[0]]["quantity"] += int(detail[1])
-                            detail_tot[detail[0]]["total"] += float(detail[2])
-                    self.TE_database_response.append("\n --------------------------\n")
-                    
-                if result == 0:
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 6, "DatabaseWindow"))
-                    return
-            
-            else: # Se è stato selezionato un orario
-                time_string = self.LE_time_range.text().replace(" ", "")
-                if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
-                    return
-                time_string = time_string.replace(":", "-")
-                time_string = time_string.split("-")
-                first_time = f"{time_string[0]}{time_string[1]}00"
-                second_time = f"{time_string[2]}{time_string[3]}00"
-                if int(first_time) > int(second_time):
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
-                    return
-                for products in col.find({"receipt_date": self.first_date, "receipt_time": {"$gte": first_time, "$lte": second_time}}, {"_id": 0}):
-                    result = 1
-                    self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
-                    for product in str(products["receipt_products"]).split("@newline@"):
-                        detail = product.split("@space@")
-                        self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
-                        total_receipts += float(detail[2])
-                        if detail[0] not in detail_tot:
-                            detail_tot[detail[0]] = {}
-                            detail_tot[detail[0]]["quantity"] = int(detail[1])
-                            detail_tot[detail[0]]["total"] = float(detail[2])
-                        else:
-                            detail_tot[detail[0]]["quantity"] += int(detail[1])
-                            detail_tot[detail[0]]["total"] += float(detail[2])
-                    self.TE_database_response.append("\n --------------------------\n")
-                    
-                if result == 0:
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 8, "DatabaseWindow"))
-                    return
-                       
-            text_cursor = QTextCursor(self.TE_database_response.document()) # Spostamento del cursore all'inizio
-            text_cursor.setPosition(0)
-            self.TE_database_response.setTextCursor(text_cursor)
-            total_string = f"-*-* {lang.msg(language, 9, 'DatabaseWindow')} {firstdate} *-*-\n"
-            for detail in detail_tot: # Loop del dizionario con il totale vendite
-                total_string = total_string + f"\n{detail} - {lang.msg(language, 42, 'MainWindow')} {detail_tot[detail]['quantity']} - {lang.msg(language, 18, 'MainWindow')} {detail_tot[detail]['total']:.2f}"
-            total_string = total_string + f"\n\n-*-* {lang.msg(language, 10, 'DatabaseWindow')} {lang.msg(language, 18, 'MainWindow')} {total_receipts:.2f} *-*-\n --------------------------\n\n\n"
-            self.TE_database_response.insertPlainText(total_string)
-        
-        else: # Se sono state selezionate 2 date
-            firstdate = f"{self.first_date[6:]}/{self.first_date[4:6]}/{self.first_date[:4]}"
-            seconddate = f"{self.second_date[6:]}/{self.second_date[4:6]}/{self.second_date[:4]}"
-            if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
-                for products in col.find({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}}, {"_id": 0}):
-                    result = 1
-                    self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
-                    for product in str(products["receipt_products"]).split("@newline@"):
-                        detail = product.split("@space@")
-                        self.TE_database_response.append(f"\n{detail[0]} - {lang.msg(language, 42, 'MainWindow')} {detail[1]} - {lang.msg(language, 18, 'MainWindow')} {detail[2]}")
-                        total_receipts += float(detail[2])
-                        if detail[0] not in detail_tot:
-                            detail_tot[detail[0]] = {}
-                            detail_tot[detail[0]]["quantity"] = int(detail[1])
-                            detail_tot[detail[0]]["total"] = float(detail[2])
-                        else:
-                            detail_tot[detail[0]]["quantity"] += int(detail[1])
-                            detail_tot[detail[0]]["total"] += float(detail[2])
-                    self.TE_database_response.append("\n --------------------------\n")
-                    
-                if result == 0:
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 11, "DatabaseWindow"))
-                    return
-            
-            else: # Se è stato selezionato un orario
-                time_string = self.LE_time_range.text().replace(" ", "")
-                if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
-                    return
-                time_string = time_string.replace(":", "-")
-                time_string = time_string.split("-")
-                first_time = f"{time_string[0]}{time_string[1]}00"
-                second_time = f"{time_string[2]}{time_string[3]}00"
-                for products in col.find({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}}, {"_id": 0}):
-                    if str(products["receipt_date"]) == self.first_date: # Controllo dell'orario nella prima data
-                        if int(products["receipt_time"]) < int(first_time): continue
-                    if str(products["receipt_date"]) == self.second_date: # Controllo dell'orario nella seconda data
-                        if int(products["receipt_time"]) > int(second_time): continue
-                        
-                    self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')} {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
-                    for product in str(products["receipt_products"]).split("@newline@"):
-                        detail = product.split("@space@")
-                        self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
-                        total_receipts += float(detail[2])
-                        if detail[0] not in detail_tot:
-                            detail_tot[detail[0]] = {}
-                            detail_tot[detail[0]]["quantity"] = int(detail[1])
-                            detail_tot[detail[0]]["total"] = float(detail[2])
-                        else:
-                            detail_tot[detail[0]]["quantity"] += int(detail[1])
-                            detail_tot[detail[0]]["total"] += float(detail[2])
-                        result = 1
-                    self.TE_database_response.append("\n --------------------------\n")
-                    
-                if result == 0:
-                    self.TE_database_response.clear()
-                    self.TE_database_response.setPlainText(lang.msg(language, 12, "DatabaseWindow"))
-                    return
-            
-            text_cursor = QTextCursor(self.TE_database_response.document()) # Spostamento del cursore all'inizio
-            text_cursor.setPosition(0)
-            self.TE_database_response.setTextCursor(text_cursor)
-            total_string = f"-*-* {lang.msg(language, 13, 'DatabaseWindow')} {firstdate} {lang.msg(language, 14, 'DatabaseWindow')} {seconddate} *-*-\n"
-            for detail in detail_tot: # Loop del dizionario con il totale vendite
-                total_string = total_string + f"\n{detail} - {lang.msg(language, 42, 'MainWindow')} {detail_tot[detail]['quantity']} - {lang.msg(language, 18, 'MainWindow')} {detail_tot[detail]['total']:.2f}"
-            total_string = total_string + f"\n\n-*-* {lang.msg(language, 10, 'DatabaseWindow')} {lang.msg(language, 18, 'MainWindow')} {total_receipts:.2f} *-*-\n --------------------------\n\n\n"
-            self.TE_database_response.insertPlainText(total_string)
-    
-    # Eliminazione dal database
-    
-    def delete_database(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle(lang.msg(language, 21, "MainWindow"))
-        msg.setText(lang.msg(language, 15, "DatabaseWindow"))
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.No)
-        msg.buttonClicked.connect(self.delete_database_confirm)
-        return msg.exec()
-    
-    def delete_database_confirm(self, button):
-        if button.text() == "&OK" or button.text() == "OK":
-            col = self.db["receipts"]
+        try: # Controllo della connessione al database
             if self.second_date == "": # Se è selezionata una sola data
+                firstdate = f"{self.first_date[6:]}/{self.first_date[4:6]}/{self.first_date[:4]}"
                 if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
-                    col.delete_many({"receipt_date": self.first_date})
+                    for products in col.find({"receipt_date": self.first_date}, {"_id": 0}):
+                        result = 1
+                        self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
+                        for product in str(products["receipt_products"]).split("@newline@"):
+                            detail = product.split("@space@")
+                            self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
+                            total_receipts += float(detail[2])
+                            if detail[0] not in detail_tot:
+                                detail_tot[detail[0]] = {}
+                                detail_tot[detail[0]]["quantity"] = int(detail[1])
+                                detail_tot[detail[0]]["total"] = float(detail[2])
+                            else:
+                                detail_tot[detail[0]]["quantity"] += int(detail[1])
+                                detail_tot[detail[0]]["total"] += float(detail[2])
+                        self.TE_database_response.append("\n --------------------------\n")
+                        
+                    if result == 0:
+                        self.TE_database_response.clear()
+                        self.TE_database_response.setPlainText(lang.msg(language, 6, "DatabaseWindow"))
+                        return
+                
                 else: # Se è stato selezionato un orario
                     time_string = self.LE_time_range.text().replace(" ", "")
                     if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
@@ -1072,10 +1344,67 @@ class DatabaseWindow(QWidget):
                         self.TE_database_response.clear()
                         self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
                         return
-                    col.delete_many({"receipt_date": self.first_date, "receipt_time": {"$gte": first_time, "$lte": second_time}})
+                    for products in col.find({"receipt_date": self.first_date, "receipt_time": {"$gte": first_time, "$lte": second_time}}, {"_id": 0}):
+                        result = 1
+                        self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
+                        for product in str(products["receipt_products"]).split("@newline@"):
+                            detail = product.split("@space@")
+                            self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
+                            total_receipts += float(detail[2])
+                            if detail[0] not in detail_tot:
+                                detail_tot[detail[0]] = {}
+                                detail_tot[detail[0]]["quantity"] = int(detail[1])
+                                detail_tot[detail[0]]["total"] = float(detail[2])
+                            else:
+                                detail_tot[detail[0]]["quantity"] += int(detail[1])
+                                detail_tot[detail[0]]["total"] += float(detail[2])
+                        self.TE_database_response.append("\n --------------------------\n")
+                        
+                    if result == 0:
+                        self.TE_database_response.clear()
+                        self.TE_database_response.setPlainText(lang.msg(language, 8, "DatabaseWindow"))
+                        return
+                        
+                text_cursor = QTextCursor(self.TE_database_response.document()) # Spostamento del cursore all'inizio
+                text_cursor.setPosition(0)
+                self.TE_database_response.setTextCursor(text_cursor)
+                total_string = f"-*-* {lang.msg(language, 9, 'DatabaseWindow')} {firstdate} *-*-\n"
+                if self.CB_sort_orders.currentIndex() == 0: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["total"])) # Ordinato per prezzo
+                if self.CB_sort_orders.currentIndex() == 1: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["quantity"])) # Ordinato per quantità
+                if self.CB_sort_orders.currentIndex() == 2: detail_tot = dict(sorted(detail_tot.items())) # Ordinato per descrizione
+                if self.CB_sort_orders.currentIndex() == 3: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["total"], reverse=True)) # Ordinato per prezzo (contrario)
+                if self.CB_sort_orders.currentIndex() == 4: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["quantity"], reverse=True)) # Ordinato per quantità (contrario)
+                if self.CB_sort_orders.currentIndex() == 5: detail_tot = dict(sorted(detail_tot.items(), reverse=True)) # Ordinato per descrizione (contrario)
+                for detail in detail_tot: # Loop del dizionario con il totale vendite
+                    total_string = total_string + f"\n{detail} - {lang.msg(language, 42, 'MainWindow')} {detail_tot[detail]['quantity']} - {lang.msg(language, 18, 'MainWindow')} {detail_tot[detail]['total']:.2f}"
+                total_string = total_string + f"\n\n-*-* {lang.msg(language, 10, 'DatabaseWindow')} {lang.msg(language, 18, 'MainWindow')} {total_receipts:.2f} *-*-\n --------------------------\n\n\n"
+                self.TE_database_response.insertPlainText(total_string)
+            
             else: # Se sono state selezionate 2 date
+                firstdate = f"{self.first_date[6:]}/{self.first_date[4:6]}/{self.first_date[:4]}"
+                seconddate = f"{self.second_date[6:]}/{self.second_date[4:6]}/{self.second_date[:4]}"
                 if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
-                    col.delete_many({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}})
+                    for products in col.find({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}}, {"_id": 0}):
+                        result = 1
+                        self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')}: {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
+                        for product in str(products["receipt_products"]).split("@newline@"):
+                            detail = product.split("@space@")
+                            self.TE_database_response.append(f"\n{detail[0]} - {lang.msg(language, 42, 'MainWindow')} {detail[1]} - {lang.msg(language, 18, 'MainWindow')} {detail[2]}")
+                            total_receipts += float(detail[2])
+                            if detail[0] not in detail_tot:
+                                detail_tot[detail[0]] = {}
+                                detail_tot[detail[0]]["quantity"] = int(detail[1])
+                                detail_tot[detail[0]]["total"] = float(detail[2])
+                            else:
+                                detail_tot[detail[0]]["quantity"] += int(detail[1])
+                                detail_tot[detail[0]]["total"] += float(detail[2])
+                        self.TE_database_response.append("\n --------------------------\n")
+                        
+                    if result == 0:
+                        self.TE_database_response.clear()
+                        self.TE_database_response.setPlainText(lang.msg(language, 11, "DatabaseWindow"))
+                        return
+                
                 else: # Se è stato selezionato un orario
                     time_string = self.LE_time_range.text().replace(" ", "")
                     if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
@@ -1091,9 +1420,105 @@ class DatabaseWindow(QWidget):
                             if int(products["receipt_time"]) < int(first_time): continue
                         if str(products["receipt_date"]) == self.second_date: # Controllo dell'orario nella seconda data
                             if int(products["receipt_time"]) > int(second_time): continue
-                        col.delete_one({"receipt_date": products["receipt_date"], "receipt_time": products["receipt_time"]})
-            self.TE_database_response.clear()
-            self.TE_database_response.insertPlainText(f"-*-* {lang.msg(language, 16, 'DatabaseWindow')} *-*-\n\n")
+                            
+                        self.TE_database_response.append(f"\n{lang.msg(language, 4, 'DatabaseWindow')}: {str(products['receipt_date'])[6:]}/{str(products['receipt_date'])[4:6]}/{str(products['receipt_date'])[:4]}\n{lang.msg(language, 5, 'DatabaseWindow')} {str(products['receipt_time'])[:2]}:{str(products['receipt_time'])[2:4]}:{str(products['receipt_time'])[4:]}\n")
+                        for product in str(products["receipt_products"]).split("@newline@"):
+                            detail = product.split("@space@")
+                            self.TE_database_response.append(f"\n{detail[0]} - qta {detail[1]} - € {detail[2]}")
+                            total_receipts += float(detail[2])
+                            if detail[0] not in detail_tot:
+                                detail_tot[detail[0]] = {}
+                                detail_tot[detail[0]]["quantity"] = int(detail[1])
+                                detail_tot[detail[0]]["total"] = float(detail[2])
+                            else:
+                                detail_tot[detail[0]]["quantity"] += int(detail[1])
+                                detail_tot[detail[0]]["total"] += float(detail[2])
+                            result = 1
+                        self.TE_database_response.append("\n --------------------------\n")
+                        
+                    if result == 0:
+                        self.TE_database_response.clear()
+                        self.TE_database_response.setPlainText(lang.msg(language, 12, "DatabaseWindow"))
+                        return
+                
+                text_cursor = QTextCursor(self.TE_database_response.document()) # Spostamento del cursore all'inizio
+                text_cursor.setPosition(0)
+                self.TE_database_response.setTextCursor(text_cursor)
+                total_string = f"-*-* {lang.msg(language, 13, 'DatabaseWindow')} {firstdate} {lang.msg(language, 14, 'DatabaseWindow')} {seconddate} *-*-\n"
+                if self.CB_sort_orders.currentIndex() == 0: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["total"])) # Ordinato per prezzo
+                if self.CB_sort_orders.currentIndex() == 1: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["quantity"])) # Ordinato per quantità
+                if self.CB_sort_orders.currentIndex() == 2: detail_tot = dict(sorted(detail_tot.items())) # Ordinato per descrizione
+                if self.CB_sort_orders.currentIndex() == 3: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["total"], reverse=True)) # Ordinato per prezzo (contrario)
+                if self.CB_sort_orders.currentIndex() == 4: detail_tot = dict(sorted(detail_tot.items(), key=lambda item: item[1]["quantity"], reverse=True)) # Ordinato per quantità (contrario)
+                if self.CB_sort_orders.currentIndex() == 5: detail_tot = dict(sorted(detail_tot.items(), reverse=True)) # Ordinato per descrizione (contrario)
+                for detail in detail_tot: # Loop del dizionario con il totale vendite
+                    total_string = total_string + f"\n{detail} - {lang.msg(language, 42, 'MainWindow')} {detail_tot[detail]['quantity']} - {lang.msg(language, 18, 'MainWindow')} {detail_tot[detail]['total']:.2f}"
+                total_string = total_string + f"\n\n-*-* {lang.msg(language, 10, 'DatabaseWindow')} {lang.msg(language, 18, 'MainWindow')} {total_receipts:.2f} *-*-\n --------------------------\n\n\n"
+                self.TE_database_response.insertPlainText(total_string)
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
+    
+    # Eliminazione dal database
+    
+    def delete_database(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle(lang.msg(language, 21, "MainWindow"))
+        msg.setText(lang.msg(language, 15, "DatabaseWindow"))
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.No)
+        msg.buttonClicked.connect(self.delete_database_confirm)
+        return msg.exec()
+    
+    def delete_database_confirm(self, button):
+        if button.text() == "&OK" or button.text() == "OK":
+            try: # Controllo della connessione al database
+                col = self.db["receipts"]
+                if self.second_date == "": # Se è selezionata una sola data
+                    if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
+                        col.delete_many({"receipt_date": self.first_date})
+                    else: # Se è stato selezionato un orario
+                        time_string = self.LE_time_range.text().replace(" ", "")
+                        if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
+                            self.TE_database_response.clear()
+                            self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
+                            return
+                        time_string = time_string.replace(":", "-")
+                        time_string = time_string.split("-")
+                        first_time = f"{time_string[0]}{time_string[1]}00"
+                        second_time = f"{time_string[2]}{time_string[3]}00"
+                        if int(first_time) > int(second_time):
+                            self.TE_database_response.clear()
+                            self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
+                            return
+                        col.delete_many({"receipt_date": self.first_date, "receipt_time": {"$gte": first_time, "$lte": second_time}})
+                else: # Se sono state selezionate 2 date
+                    if len(self.LE_time_range.text()) == 0: # Se non è stato selezionato un orario
+                        col.delete_many({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}})
+                    else: # Se è stato selezionato un orario
+                        time_string = self.LE_time_range.text().replace(" ", "")
+                        if len(time_string) != 11 or time_string.count("-") != 1 or time_string.count(":") != 2: # Controllo della stringa orario
+                            self.TE_database_response.clear()
+                            self.TE_database_response.setPlainText(lang.msg(language, 7, "DatabaseWindow"))
+                            return
+                        time_string = time_string.replace(":", "-")
+                        time_string = time_string.split("-")
+                        first_time = f"{time_string[0]}{time_string[1]}00"
+                        second_time = f"{time_string[2]}{time_string[3]}00"
+                        for products in col.find({"receipt_date": {"$gte": self.first_date, "$lte": self.second_date}}, {"_id": 0}):
+                            if str(products["receipt_date"]) == self.first_date: # Controllo dell'orario nella prima data
+                                if int(products["receipt_time"]) < int(first_time): continue
+                            if str(products["receipt_date"]) == self.second_date: # Controllo dell'orario nella seconda data
+                                if int(products["receipt_time"]) > int(second_time): continue
+                            col.delete_one({"receipt_date": products["receipt_date"], "receipt_time": products["receipt_time"]})
+                self.TE_database_response.clear()
+                self.TE_database_response.insertPlainText(f"-*-* {lang.msg(language, 16, 'DatabaseWindow')} *-*-\n\n")
+            except:
+                err_msg = QMessageBox(self)
+                err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+                err_msg.setText(lang.msg(language, 48, "MainWindow"))
+                return err_msg.exec()
 
 # -*-* Creazione menu articolo *-*-
 
@@ -1228,8 +1653,14 @@ class CreateMenuWindow(QWidget):
         # Inserimento nel database
         
         global menu_dict
-        col = self.db["maincategory"]
-        col.update_one({"description": self.product, "category": self.category}, {"$set": {"menu": menu_string}}, upsert=True)
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            col.update_one({"description": self.product, "category": self.category}, {"$set": {"menu": menu_string}}, upsert=True)
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
         
         # Inserimento nel dizionario
         menu_dict.update({self.menu_product: menu_string})
@@ -1250,8 +1681,14 @@ class CreateMenuWindow(QWidget):
         
         # Rimozione dal database
         
-        col = self.db["maincategory"]
-        col.update_one({"description": self.product, "category": self.category}, {"$unset": {"menu": ""}})
+        try: # Controllo della connessione al database
+            col = self.db["maincategory"]
+            col.update_one({"description": self.product, "category": self.category}, {"$unset": {"menu": ""}})
+        except:
+            err_msg = QMessageBox(self)
+            err_msg.setWindowTitle(lang.msg(language, 19, "MainWindow"))
+            err_msg.setText(lang.msg(language, 48, "MainWindow"))
+            return err_msg.exec()
         
         # Rimozione dal dizionario
         
@@ -1291,9 +1728,9 @@ class OptionsMenu(QWidget):
         
         # Lettura file e impostazione variabili
     
-        if os.path.exists(f"{os.environ['HOME']}/Orders/options.txt"):
-            options_file = open(f"{os.environ['HOME']}/Orders/options.txt", "r")
-            self.mongodb_connection =options_file.readline().replace("db_connection=", "").replace("\n", "")
+        if os.path.exists(f"{os.path.expanduser('~')}/Orders/options.txt"):
+            options_file = open(f"{os.path.expanduser('~')}/Orders/options.txt", "r")
+            self.mongodb_connection = options_file.readline().replace("db_connection=", "").replace("\n", "")
             self.heading = options_file.readline().replace("heading=", "").replace("\n", "")
             self.interface_style = options_file.readline().replace("interface=", "").replace("\n", "")
             self.logo_path = options_file.readline().replace("logo=", "").replace("\n", "")
@@ -1456,7 +1893,7 @@ class OptionsMenu(QWidget):
         
         # Salvataggio file
         
-        options_file = open(f"{os.environ['HOME']}/Orders/options.txt", "w")
+        options_file = open(f"{os.path.expanduser('~')}/Orders/options.txt", "w")
         options_file.write(f"db_connection={self.LE_database_connection.text()}\nheading={self.LE_heading.text()}\ninterface={self.CB_interface_style.currentText()}\nlogo={self.logo_path}\nicon={self.icon_path}\nlanguage={self.CB_language.currentText()}")
         options_file.close()
         
@@ -1464,7 +1901,7 @@ class OptionsMenu(QWidget):
         
         # Lettura file e impostazione variabili
     
-        options_file = open(f"{os.environ['HOME']}/Orders/options.txt", "r")
+        options_file = open(f"{os.path.expanduser('~')}/Orders/options.txt", "r")
         try:
             global dbclient
             dbclient = pymongo.MongoClient(options_file.readline().replace("db_connection=", "").replace("\n", ""))
@@ -1513,9 +1950,9 @@ class OptionsMenu(QWidget):
 
 # -*-* Avvio applicazione *-*-
 
-if os.path.exists(f"{os.environ['HOME']}/Orders") == False: os.mkdir(f"{os.environ['HOME']}/Orders")
+if os.path.exists(f"{os.path.expanduser('~')}/Orders") == False: os.mkdir(f"{os.path.expanduser('~')}/Orders")
 
-if os.path.exists(f"{os.environ['HOME']}/Orders/options.txt") == False: first_start_application = 1
+if os.path.exists(f"{os.path.expanduser('~')}/Orders/options.txt") == False: first_start_application = 1
     
 if __name__ == '__main__':
     app = QApplication(sys.argv)

@@ -7,8 +7,9 @@ from PyQt6.QtWidgets import (QWidget,QApplication,QGridLayout,QVBoxLayout,QLabel
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap,QAction,QCursor,QIcon
 import Memberships_Language as lang
+import ItalyCityCode as ICC
 
-# Versione 1.0.2-r3
+# Versione 1.0.2-r4
 
 # Variabili globali
 
@@ -78,7 +79,7 @@ class MainWindow(QWidget):
         self.LE_tax_id_code = QLineEdit(self)
         self.LE_tax_id_code.setPlaceholderText(lang.msg(language, 3, "MainWindow"))
         self.LE_tax_id_code.textChanged.connect(self.auto_search)
-        self.LE_tax_id_code.textChanged.connect(self.auto_sex_change)
+        self.LE_tax_id_code.textChanged.connect(self.auto_field_change)
         self.lay.addWidget(self.LE_tax_id_code, 1, 0, 1, 3, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
         # Casella nome (Parte centrale sinistra)
@@ -368,18 +369,42 @@ class MainWindow(QWidget):
 {lang.msg(language, 29, 'MainWindow')}: {date_of_membership}""")
             self.clear_box()
     
-    # -*-* Funzione cambio automatico casella sesso
+    # -*-* Funzione cambio automatico caselle
     
-    def auto_sex_change(self):
-        try:
-            date = int(self.LE_tax_id_code.text()[9:11])
-            if date > 40:
-                if language == "ITALIANO": self.CB_sex.setCurrentText("FEMMINA")
-                if language == "ENGLISH": self.CB_sex.setCurrentText("FEMALE")
-            else:
-                if language == "ITALIANO": self.CB_sex.setCurrentText("MASCHIO")
-                if language == "ENGLISH": self.CB_sex.setCurrentText("MALE")
-        except: pass
+    def auto_field_change(self):
+        tax_id_code = self.LE_tax_id_code.text().upper().replace(" ", "")
+        if len(tax_id_code) == 16:
+            tax_id_code_to_month = {"A":"01","B":"02","C":"03","D":"04","E":"05","H":"06","L":"07","M":"08","P":"09","R":"10","S":"11","T":"12"}
+            # Casella data di nascita
+            try:
+                current_year = datetime.now()
+                current_year = current_year.strftime("%Y")
+                day = int(tax_id_code[9:11])
+                if day > 40: day = day -40
+                if day < 10: day = f"0{day}"
+                month = tax_id_code_to_month[tax_id_code[8]]
+                year = int(f"{current_year[:2]}{tax_id_code[6:8]}")
+                if int(current_year[2:]) < int(tax_id_code[6:8]): year -= 100
+                date_of_birth = f"{day}/{month}/{year}"
+                self.LE_date_of_birth.setText(date_of_birth)
+            except: pass
+            
+            # Casella sesso
+            try:
+                date = int(tax_id_code[9:11])
+                if date > 40:
+                    if language == "ITALIANO": self.CB_sex.setCurrentText("FEMMINA")
+                    if language == "ENGLISH": self.CB_sex.setCurrentText("FEMALE")
+                else:
+                    if language == "ITALIANO": self.CB_sex.setCurrentText("MASCHIO")
+                    if language == "ENGLISH": self.CB_sex.setCurrentText("MALE")
+            except: pass
+            
+            # Casella luogo di nascita
+            
+            try:
+                self.LE_birth_place.setText(ICC.GetCity(tax_id_code[11:15]))
+            except: pass
     
     # -*-* Funzione ricerca automatica nel database *-*-
     
@@ -679,6 +704,7 @@ class DatabaseWindow(QWidget):
                                                   lang.msg(language, 14, "MainWindow"), lang.msg(language, 29, "MainWindow")])
         self.T_results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.T_results.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.T_results.doubleClicked.connect(self.show_detailed_person)
         self.T_results.customContextMenuRequested.connect(self.T_results_CM)
         self.T_results_headers = self.T_results.horizontalHeader()
         self.lay.addWidget(self.T_results, 2, 0, 1, 3, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -1051,14 +1077,17 @@ class DatabaseWindow(QWidget):
     def T_results_CM(self):
         if self.T_results.currentRow() == -1: return
         menu = QMenu(self)
+        detailed_show_action = QAction(lang.msg(language, 31, "DatabaseWindow"), self)
         delete_action = QAction(lang.msg(language, 1, "DatabaseWindow"), self)
         delete_action.triggered.connect(self.delete_person)
-        menu.addAction(delete_action)
+        detailed_show_action.triggered.connect(self.show_detailed_person)
+        menu.addActions([detailed_show_action, delete_action])
         menu.popup(QCursor.pos())
     
     # Funzione elimina
     
     def delete_person(self):
+        if self.T_results.currentRow() == -1: return
         # Ricerca della persona alla pressione del tasto
         
         row = self.T_results.currentRow()       
@@ -1073,6 +1102,43 @@ class DatabaseWindow(QWidget):
         
         self.T_results.removeRow(row)
         self.T_results.setCurrentCell(-1, -1)
+    
+    # Funzione visualizzazione dettagliata
+    
+    def show_detailed_person(self):
+        if self.T_results.currentRow() == -1: return
+        # Ricerca della persona alla pressione del tasto
+        
+        row = self.T_results.currentRow()       
+        tax_id_code = self.T_results.item(row, 0).text()
+        name = self.T_results.item(row, 1).text()
+        surname = self.T_results.item(row, 2).text()
+        
+        col = self.db["cards"] # Connessione alla collezione del database
+        person = col.find_one({"tax_id_code": tax_id_code, "name": name, "surname": surname})
+        
+        # Visualizzazione dettagliata della persona
+        
+        date_of_membership_st = "-"
+        if person["date_of_membership"] != "-":
+            date_of_membership_st = f"{person['date_of_membership'][6:]}/{person['date_of_membership'][4:6]}/{person['date_of_membership'][:4]}"
+        detailed_person_st = f"""{lang.msg(language, 3, "MainWindow")}: {person["tax_id_code"]}
+{lang.msg(language, 4, "MainWindow")}: {person["name"]}
+{lang.msg(language, 5, "MainWindow")}: {person["surname"]}
+{lang.msg(language, 6, "MainWindow")}: {person["date_of_birth"]}
+{lang.msg(language, 7, "MainWindow")}: {person["birth_place"]}
+{lang.msg(language, 28, "MainWindow")}: {person["sex"]}
+{lang.msg(language, 10, "MainWindow")}: {person["city_of_residence"]}
+{lang.msg(language, 11, "MainWindow")}: {person["residential_address"]}
+{lang.msg(language, 12, "MainWindow")}: {person["postal_code"]}
+{lang.msg(language, 13, "MainWindow")}: {person["email"]}
+{lang.msg(language, 14, "MainWindow")}: {person["card_number"]}
+{lang.msg(language, 29, "MainWindow")}: {date_of_membership_st}"""
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle(lang.msg(language, 32, "DatabaseWindow"))
+        msg.setText(detailed_person_st)       
+        return msg.exec()
     
     # -*-* Funzione di ridimensionamento finestra *-*-
     
@@ -1606,11 +1672,11 @@ class ExcelWindow(QWidget):
         # Salvataggio file excel
         date = datetime.now()
         date = date.strftime("%Y%m%d")
-        wb.save(f"{os.environ['HOME']}/Memberships/template_{date}.xlsx")
+        wb.save(f"{os.path.expanduser('~')}/Memberships/template_{date}.xlsx")
         
         msg = QMessageBox(self)
         msg.setWindowTitle(lang.msg(language, 34, "ExcelWindow"))
-        msg.setText(f"{lang.msg(language, 35, 'ExcelWindow')}:\n{os.environ['HOME']}/Memberships/template_{date}.xlsx")
+        msg.setText(f"{lang.msg(language, 35, 'ExcelWindow')}:\n{os.path.expanduser('~')}/Memberships/template_{date}.xlsx")
         return msg.exec()
     
     # *-*-* Funzione controllo numeri *-*-*
@@ -1643,8 +1709,8 @@ class OptionsMenu(QWidget):
         
         # Lettura file e impostazione variabili
     
-        if os.path.exists(f"{os.environ['HOME']}/Memberships/options.txt"):
-            options_file = open(f"{os.environ['HOME']}/Memberships/options.txt", "r")
+        if os.path.exists(f"{os.path.expanduser('~')}/Memberships/options.txt"):
+            options_file = open(f"{os.path.expanduser('~')}/Memberships/options.txt", "r")
             self.mongodb_connection =options_file.readline().replace("db_connection=", "").replace("\n", "")
             self.heading = options_file.readline().replace("heading=", "").replace("\n", "")
             self.interface_style = options_file.readline().replace("interface=", "").replace("\n", "")
@@ -1808,7 +1874,7 @@ class OptionsMenu(QWidget):
         
         # Salvataggio file
         
-        options_file = open(f"{os.environ['HOME']}/Memberships/options.txt", "w")
+        options_file = open(f"{os.path.expanduser('~')}/Memberships/options.txt", "w")
         options_file.write(f"db_connection={self.LE_database_connection.text()}\nheading={self.LE_heading.text()}\ninterface={self.CB_interface_style.currentText()}\nlogo={self.logo_path}\nicon={self.icon_path}\nlanguage={self.CB_language.currentText()}")
         options_file.close()
         
@@ -1816,7 +1882,7 @@ class OptionsMenu(QWidget):
         
         # Lettura file e impostazione variabili
     
-        options_file = open(f"{os.environ['HOME']}/Memberships/options.txt", "r")
+        options_file = open(f"{os.path.expanduser('~')}/Memberships/options.txt", "r")
         try:
             global dbclient
             dbclient = pymongo.MongoClient(options_file.readline().replace("db_connection=", "").replace("\n", ""))
@@ -1853,9 +1919,9 @@ class OptionsMenu(QWidget):
 
 # -*-* Avvio applicazione *-*-
 
-if os.path.exists(f"{os.environ['HOME']}/Memberships") == False: os.mkdir(f"{os.environ['HOME']}/Memberships")
+if os.path.exists(f"{os.path.expanduser('~')}/Memberships") == False: os.mkdir(f"{os.path.expanduser('~')}/Memberships")
 
-if os.path.exists(f"{os.environ['HOME']}/Memberships/options.txt") == False: first_start_application = 1
+if os.path.exists(f"{os.path.expanduser('~')}/Memberships/options.txt") == False: first_start_application = 1
     
 if __name__ == '__main__':
     app = QApplication(sys.argv)
